@@ -54,7 +54,7 @@ Our approach combines:
 
 
 ## 🚀 Reproduce the results
-We use [uv](https://docs.astral.sh/uv/) for dependency management and [Ray](https://docs.ray.io/en/latest/ray-core/ray-core.html) for distributed training.
+We use [uv](https://docs.astral.sh/uv/) for dependency management and [Ray](https://docs.ray.io/en/latest/ray-core/walkthrough.html) for distributed training.
 
 ```bash
 git clone https://github.com/JetBrains-Research/PIPer.git
