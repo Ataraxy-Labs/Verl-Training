@@ -5,7 +5,7 @@ hydra:
 defaults:
   - ppo_trainer  # loaded from verl/trainer/config/ppo_trainer.yaml
   - _self_
-  - model: custom-qwen3-8b
+  - model: custom-qwen3-4b
   - langgraph: single-turn-loop # LLM call without feedback
   - reward: strict-shellcheck
   - lr: cosine-3e-6
@@ -19,13 +19,15 @@ actor_rollout_ref:
     checkpoint:
       contents: [hf_model, model, optimizer, extra]
     entropy_coeff: 0.001
-    ppo_mini_batch_size: 32
+    ppo_mini_batch_size: 4  # Reduced from 32 to match max_num_seqs
     ppo_micro_batch_size_per_gpu: 1
     ppo_epochs: 5  # why is this here?
     fsdp_config:
       model_dtype: bfloat16
   model:
     path: ${model_path}
+    override_config:
+      attn_implementation: "sdpa"
   ref:
     log_prob_micro_batch_size_per_gpu: 1
   rollout:
@@ -37,9 +39,10 @@ actor_rollout_ref:
       tool_parser: hermes
     multi_turn:
       enable: true # use custom multi-turn script, or GRPO
-    enforce_eager: false  # why is this here?
+    enforce_eager: false  # Disabled to work around vLLM v1 Ray executor bug (TypeError: 'RayObjectRefFuture' object is not subscriptable)
     max_model_len: 32000
     max_num_batched_tokens: 32000
+    max_num_seqs: 4  # Reduced from 1024 to limit parallel processing and prevent OpenAI API rate limits
     log_prob_micro_batch_size_per_gpu: 1
 critic:
   checkpoint:
@@ -61,7 +64,8 @@ custom:  # see piper.hparams_entrypoint.py for usage
 data:
   max_prompt_length: 30000
   max_response_length: 4096
-  train_batch_size: 64
+  train_batch_size: 4  # Reduced from 64 to limit parallel repo processing and prevent OpenAI API rate limits
+  dataloader_num_workers: 1  # Limit DataLoader parallelism
   return_raw_chat: true
 trainer:
   default_local_dir: /tmp/ray-data/checkpoints/${trainer.project_name}/${trainer.experiment_name}

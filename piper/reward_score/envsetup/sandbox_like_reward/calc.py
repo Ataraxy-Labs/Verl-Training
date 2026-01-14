@@ -12,9 +12,27 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import InjectedState, create_react_agent
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+    after_log
+)
+import logging
+from openai import (
+    APIError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError
+)
 
 from piper.reward_score.envsetup.sandbox_like_reward.prompts import create_evaluation_prompt
 from piper.reward_score.envsetup.sandbox_like_reward.utils import default_execute_bash_command, gather_repo_exploration, truncate
+
+# Set up logging for retry attempts
+logger = logging.getLogger(__name__)
 
 # Set up logging
 
@@ -44,33 +62,83 @@ def create_tool(repository: str, max_length: int = 8000):
 
 class LLMJudgeBatch:
     """LLM Judge with batch processing capabilities."""
-    
-    def __init__(self, 
-                 model: str = "gpt-4o", 
-                 temperature: float = 0.0, 
-                 debug: bool = False, 
+
+    def __init__(self,
+                 model: str = "gpt-4o",
+                 temperature: float = 0.0,
+                 debug: bool = False,
                  is_agent: bool = False,
                  use_exploration: bool = True,
-                 version: str = "v1"):
-        """Initialize the LLM judge."""
+                 version: str = "v1",
+                 max_concurrent_requests: int = 5):
+        """Initialize the LLM judge.
+
+        Args:
+            model: OpenAI model to use
+            temperature: Temperature for generation
+            debug: Enable debug logging
+            is_agent: Use agent mode with tools
+            use_exploration: Enable repository exploration
+            version: Prompt version
+            max_concurrent_requests: Maximum number of concurrent API requests (default: 5)
+        """
         if not os.getenv("OPENAI_API_KEY"):
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        
+
         self.llm = ChatOpenAI(
             model=model,
-            temperature=temperature
+            temperature=temperature,
+            max_retries=5,  # Retry up to 5 times for transient errors
+            timeout=120,    # 2 minute timeout for requests
+            request_timeout=120  # Request-level timeout
         )
         self.debug = debug
         self.is_agent = is_agent
         self.use_exploration = use_exploration
         self.version = version
+        self.max_concurrent_requests = max_concurrent_requests
+        self.semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-    async def evaluate_batch_async(self, scripts: List[str], 
+    async def _rate_limited_call_with_retry(self, task_callable):
+        """Execute a task with rate limiting and retry logic for transient errors.
+
+        Args:
+            task_callable: A callable that returns a coroutine (not a coroutine itself).
+                          This allows retries to work properly.
+        """
+        async with self.semaphore:
+            # Retry configuration:
+            # - Retry on transient errors (500, 429, timeout, generic API errors)
+            # - Stop after 5 attempts
+            # - Wait with exponential backoff: 2s, 4s, 8s, 16s, 32s
+            async for attempt in AsyncRetrying(
+                retry=retry_if_exception_type((
+                    InternalServerError,      # 500 errors
+                    RateLimitError,           # 429 rate limit errors
+                    APITimeoutError,          # Timeout errors
+                    APIError                  # Generic API errors
+                )),
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=2, min=2, max=60),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True
+            ):
+                with attempt:
+                    # Call the callable to get a fresh coroutine for each attempt
+                    result = await task_callable()
+                    return result
+
+    async def evaluate_batch_async(self, scripts: List[str],
                                    repo_names: Optional[List[str]] = None) -> List[dict]:
-        """Evaluate a batch of scripts asynchronously."""
+        """Evaluate a batch of scripts asynchronously with rate limiting."""
         if repo_names is None:
             repo_names = ["unknown"] * len(scripts)
-        
+
+        import time
+        start_time = time.time()
+        print(f"[LLMJudgeBatch] Evaluating {len(scripts)} scripts with max {self.max_concurrent_requests} concurrent requests")
+        print(f"[LLMJudgeBatch] Starting evaluation at {time.strftime('%H:%M:%S')}")
+
         # Create async tasks for each prompt
         tasks = []
         prompts = []
@@ -92,12 +160,20 @@ class LLMJudgeBatch:
                     post_model_hook=limit_turns
                 )
                 chain = {"messages": lambda x: [HumanMessage(content=x)]} | agent
-                tasks.append(chain.ainvoke(prompt))
+                # Wrap with rate limiting and retry logic
+                # Pass a lambda that creates a fresh coroutine on each retry attempt
+                tasks.append(self._rate_limited_call_with_retry(lambda p=prompt: chain.ainvoke(p)))
             else:
-                tasks.append(self.llm.ainvoke(prompt))
-        
-        # Execute all tasks concurrently with exception handling
+                # Wrap with rate limiting and retry logic
+                # Pass a lambda that creates a fresh coroutine on each retry attempt
+                tasks.append(self._rate_limited_call_with_retry(lambda p=prompt: self.llm.ainvoke(p)))
+
+        # Execute all tasks concurrently with exception handling and rate limiting
+        print(f"[LLMJudgeBatch] Waiting for {len(tasks)} evaluation tasks to complete...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        elapsed = time.time() - start_time
+        print(f"[LLMJudgeBatch] Completed all evaluations in {elapsed:.1f}s ({elapsed/len(scripts):.2f}s per script)")
+        print(f"[LLMJudgeBatch] Parsing {len(results)} results...")
         
         
         # Parse the raw outputs manually
@@ -170,9 +246,13 @@ class LLMJudgeBatch:
                     'issues_count': -999,
                     'reasoning': f"Error parsing result: {e}"
                 })
-                
-        
-            
+
+        # Summary statistics
+        success_count = sum(1 for p in predictions if p['exit_code'] != -999)
+        error_count = len(predictions) - success_count
+        print(f"[LLMJudgeBatch] Parsing complete: {success_count} successful, {error_count} errors")
+        print(f"[LLMJudgeBatch] Returning {len(predictions)} predictions")
+
         return predictions
 
 

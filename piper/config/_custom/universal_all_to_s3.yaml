@@ -1,8 +1,8 @@
 # @package _global_
 custom:
-  data: 
+  data:
     file: envbench
-    config: readonly
+    config: default
   hf:
     private: False
     repo_id: null

@@ -8,7 +8,7 @@ authors = [
     { name = "Konstantin Grotov", email = "konstantin.grotov@jetbrains.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "bashlex>=0.18",
     "boto3>=1.40.11",
@@ -23,6 +23,15 @@ dependencies = [
     "langgraph-prebuilt==0.2.2",
     "langgraph-sdk==0.1.70",
     "python-dotenv>=1.1.1",
+    "tenacity>=9.0.0",
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "triton>=3.0.0",
+    "vllm==0.10.1",
+    "pyarrow>=22.0.0",
+    "datasets>=3.0.0",
+    "cachetools>=6.2.4",
+    "flash-attn>=2.8.3",
 ]
 
 [tool.setuptools.packages.find]
@@ -31,6 +40,13 @@ include = ["piper", "piper.*"]
 
 [tool.uv]
 package = true
+index-strategy = "unsafe-best-match"
+environments = [
+    "python_version >= '3.11' and python_version < '3.13' and sys_platform == 'linux' and platform_machine == 'x86_64'"
+]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch", "packaging", "ninja", "wheel"]
 
 [tool.uv.sources]
 verl = { path = "verl" }

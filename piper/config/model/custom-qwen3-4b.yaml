@@ -1,0 +1,5 @@
+# @package _global_
+model_path: Qwen/Qwen2.5-Coder-3B-Instruct
+
+_tags_:
+  model: Qwen2.5-Coder-3B

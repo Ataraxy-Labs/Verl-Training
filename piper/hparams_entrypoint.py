@@ -2,8 +2,10 @@
 Entrypoint script for Ray jobs in the verl pipeline.
 """
 
-import logging
 import os
+os.environ["VLLM_USE_V1"] = "1"
+
+import logging
 import subprocess
 import tempfile
 

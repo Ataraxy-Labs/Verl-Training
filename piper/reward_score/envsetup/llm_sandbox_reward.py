@@ -9,6 +9,7 @@ from piper.reward_score.reward_helper_fns import RewardOutput
 
 class SandboxLLMReward(BaseLLMReward):
     def __init__(self, *args, **kwargs):
+        # Pass all parameters (including max_concurrent_requests) to LLMJudgeBatch
         self.judge = LLMJudgeBatch(
             *args,
             **kwargs

@@ -2,3 +2,13 @@
 defaults:
   - override /reward: llm-reward
   - override /lr: cosine-5e-6
+
+actor_rollout_ref:
+  actor:
+    ppo_mini_batch_size: 1  # Reduce from 4 to save memory
+    gradient_checkpointing: true  # Enable to reduce memory during backward pass
+  model:
+    use_remove_padding: false  # Disable padding removal (requires flash_attn)
+    override_config:
+      attn_implementation: "sdpa"
+      use_cache: false  # Disable KV cache to save memory
