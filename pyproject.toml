@@ -31,7 +31,6 @@ dependencies = [
     "pyarrow>=22.0.0",
     "datasets>=3.0.0",
     "cachetools>=6.2.4",
-    "flash-attn>=2.8.3",
 ]
 
 [tool.setuptools.packages.find]

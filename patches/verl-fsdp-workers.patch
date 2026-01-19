@@ -1,0 +1,31 @@
+diff --git a/verl/workers/fsdp_workers.py b/verl/workers/fsdp_workers.py
+index 92850a3b..c1752a1e 100644
+--- a/verl/workers/fsdp_workers.py
++++ b/verl/workers/fsdp_workers.py
+@@ -210,7 +210,7 @@ class ActorRolloutRefWorker(Worker):
+                 pretrained_model_name_or_path=local_path,
+                 torch_dtype=torch_dtype,
+                 config=actor_model_config,
+-                attn_implementation="flash_attention_2",
++                attn_implementation=override_config_kwargs.get('attn_implementation', 'eager'),
+                 trust_remote_code=trust_remote_code,
+             )
+ 
+@@ -802,7 +802,7 @@ class CriticWorker(Worker):
+                 pretrained_model_name_or_path=local_path,
+                 torch_dtype=torch_dtype,
+                 config=critic_model_config,
+-                attn_implementation="flash_attention_2",
++                attn_implementation=override_config_kwargs.get('attn_implementation', 'eager'),
+                 trust_remote_code=config.model.get("trust_remote_code", False),
+             )
+ 
+@@ -1090,7 +1090,7 @@ class RewardModelWorker(Worker):
+                 pretrained_model_name_or_path=local_path,
+                 config=model_config,
+                 torch_dtype=torch.bfloat16,
+-                attn_implementation="flash_attention_2",
++                attn_implementation=config.model.get("override_config", {}).get('attn_implementation', 'eager'),
+                 trust_remote_code=trust_remote_code,
+             )
+ 

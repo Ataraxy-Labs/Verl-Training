@@ -1,0 +1,35 @@
+diff --git a/verl/workers/rollout/vllm_rollout/vllm_rollout.py b/verl/workers/rollout/vllm_rollout/vllm_rollout.py
+index ebda4767..0f9a71bb 100644
+--- a/verl/workers/rollout/vllm_rollout/vllm_rollout.py
++++ b/verl/workers/rollout/vllm_rollout/vllm_rollout.py
+@@ -114,10 +114,9 @@ class vLLMRollout(BaseRollout):
+         #    (which can vary across different vLLM versions);
+         # - Otherwise it's the desired value we want to explicitly set.
+         engine_kwargs = {key: val for key, val in engine_kwargs.items() if val is not None}
+-        self.inference_engine = LLM(
+-            actor_module,
+-            tokenizer=tokenizer,
+-            model_hf_config=model_hf_config,
++
++        # Build LLM kwargs - model_hf_config only supported in vLLM < 0.7.0
++        llm_kwargs = dict(
+             tensor_parallel_size=tensor_parallel_size,
+             dtype=config.dtype,
+             enforce_eager=config.enforce_eager,
+@@ -131,6 +130,16 @@ class vLLMRollout(BaseRollout):
+             **engine_kwargs,
+         )
+ 
++        # Only pass model_hf_config for older vLLM versions (0.5.4, 0.6.3)
++        if vllm_version in ("0.5.4", "0.6.3"):
++            llm_kwargs["model_hf_config"] = model_hf_config
++
++        self.inference_engine = LLM(
++            actor_module,
++            tokenizer=tokenizer,
++            **llm_kwargs,
++        )
++
+         # Offload vllm model to reduce peak memory usage
+         self.inference_engine.offload_model_weights()
+ 

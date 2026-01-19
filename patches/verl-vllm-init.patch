@@ -1,0 +1,22 @@
+diff --git a/verl/workers/rollout/vllm_rollout/__init__.py b/verl/workers/rollout/vllm_rollout/__init__.py
+index 66da822e..fd494598 100644
+--- a/verl/workers/rollout/vllm_rollout/__init__.py
++++ b/verl/workers/rollout/vllm_rollout/__init__.py
+@@ -13,6 +13,7 @@
+ # limitations under the License.
+ import os
+ from importlib.metadata import PackageNotFoundError, version
++from packaging import version as pkg_version
+ 
+ 
+ def get_version(pkg):
+@@ -38,7 +39,8 @@ else:
+     package_version = get_version(package_name)
+ ###
+ 
+-if package_version <= "0.6.3":
++# Use proper version comparison instead of string comparison
++if pkg_version.parse(package_version) <= pkg_version.parse("0.6.3"):
+     vllm_mode = "customized"
+     from .fire_vllm_rollout import FIREvLLMRollout  # noqa: F401
+     from .vllm_rollout import vLLMRollout  # noqa: F401

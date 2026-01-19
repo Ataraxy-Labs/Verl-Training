@@ -20,6 +20,31 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 """
 
 import os
+import sys
+
+# Disable flash_attn to use eager/sdpa attention
+os.environ["DISABLE_FLASH_ATTN"] = "1"
+
+# Monkey-patch transformers to skip flash_attn validation when using sdpa/eager
+def _patch_transformers_flash_attn():
+    try:
+        from transformers import modeling_flash_attention_utils
+        original_lazy_import = modeling_flash_attention_utils.lazy_import_flash_attention
+
+        def patched_lazy_import(implementation, force_import=False):
+            # Skip validation if not actually using flash_attn
+            if implementation in ["eager", "sdpa"]:
+                return
+            # For flash_attn, raise ImportError to fall back to eager
+            if implementation == "flash_attention_2":
+                raise ImportError("flash_attn not available, using eager attention")
+            return original_lazy_import(implementation, force_import)
+
+        modeling_flash_attention_utils.lazy_import_flash_attention = patched_lazy_import
+    except Exception as e:
+        print(f"Warning: Could not patch transformers flash_attn validation: {e}")
+
+_patch_transformers_flash_attn()
 
 import hydra
 import ray
@@ -42,7 +67,13 @@ def run_ppo(config) -> None:
         # this is for local ray cluster
         ray.init(
             runtime_env={
-                "env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN", "VLLM_LOGGING_LEVEL": "WARN"},
+                "env_vars": {
+                    "TOKENIZERS_PARALLELISM": "true",
+                    "NCCL_DEBUG": "WARN",
+                    "VLLM_LOGGING_LEVEL": "WARN",
+                    "DISABLE_FLASH_ATTN": "1",
+                },
+                "excludes": [".venv/", "*.pyc", "__pycache__/"],
             },
             num_cpus=config.ray_init.num_cpus,
         )
@@ -54,6 +85,9 @@ def run_ppo(config) -> None:
 @ray.remote(num_cpus=1)  # please make sure main_task is not scheduled on head
 class TaskRunner:
     def run(self, config):
+        # Apply transformers patch in Ray worker process
+        _patch_transformers_flash_attn()
+
         # print initial config
         from pprint import pprint
 

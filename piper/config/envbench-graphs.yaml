@@ -39,7 +39,7 @@ actor_rollout_ref:
       tool_parser: hermes
     multi_turn:
       enable: true # use custom multi-turn script, or GRPO
-    enforce_eager: false  # Disabled to work around vLLM v1 Ray executor bug (TypeError: 'RayObjectRefFuture' object is not subscriptable)
+    enforce_eager: true  # Disable CUDA graphs for stability with vLLM 0.10+
     max_model_len: 32000
     max_num_batched_tokens: 32000
     max_num_seqs: 4  # Reduced from 1024 to limit parallel processing and prevent OpenAI API rate limits
@@ -62,8 +62,8 @@ custom:  # see piper.hparams_entrypoint.py for usage
   command: 'python3 -m piper.trainer.multi_turn_main_ppo'
   save_all_checkpoints: True
 data:
-  max_prompt_length: 30000
-  max_response_length: 4096
+  max_prompt_length: 28000
+  max_response_length: 4000
   train_batch_size: 4  # Reduced from 64 to limit parallel repo processing and prevent OpenAI API rate limits
   dataloader_num_workers: 1  # Limit DataLoader parallelism
   return_raw_chat: true
