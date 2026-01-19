@@ -1,0 +1,22 @@
+diff --git a/verl/workers/critic/dp_critic.py b/verl/workers/critic/dp_critic.py
+index 3e63deb0..3c8bed54 100644
+--- a/verl/workers/critic/dp_critic.py
++++ b/verl/workers/critic/dp_critic.py
+@@ -21,7 +21,6 @@ import os
+ 
+ import torch
+ import torch.distributed
+-from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+ from torch import nn, optim
+ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+ 
+@@ -67,6 +66,9 @@ class DataParallelPPOCritic(BasePPOCritic):
+                 position_ids = position_ids.transpose(0, 1)
+ 
+             if self.use_remove_padding:
++                # Import flash_attn only when needed
++                from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
++
+                 input_ids_rmpad, indices, *_ = unpad_input(input_ids.unsqueeze(-1), attention_mask)  # input_ids_rmpad (total_nnz, ...)
+                 input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
+ 
